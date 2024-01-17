@@ -24,13 +24,16 @@ getSymbols(ticker, src = "yahoo", auto.assign = TRUE)
 
 names(SPY) <- str_remove(names(SPY), "SPY\\.")
 
-index(SPY)
-
 stock_dat <- as_tibble(SPY) %>%
     mutate(date = index(SPY), 
            symbol = ticker, 
            week = week(date),
            year = year(date))
+```
+
+# Week Rebalancing
+
+```{r}
 
 dates <- stock_dat %>% 
     group_by(year, week) %>% 
@@ -88,6 +91,55 @@ for(i in 1:dim(dat)[1]) {
 
 ```{r}
 ggplot(dat, aes(x = week_ending)) + 
+    geom_line(aes(y = start * 2), color = "blue") + 
+    geom_line(aes(y = long_start))
+```
+
+
+# Day Rebalance 
+
+```{r}
+dat <- stock_dat %>% 
+    select(symbol, date, Close) %>% 
+    mutate(Open = lag(Close), 
+           rate_change = (Close - Open) / Open) %>% 
+    filter(date >= as_date("2020-01-01")) %>% 
+    mutate(start = as.numeric(NA),
+           change = as.numeric(NA),
+           end = as.numeric(NA),
+           long_start = as.numeric(NA),
+           long_change = as.numeric(NA),
+           long_end = as.numeric(NA))
+
+start <- 500
+long_start <- 1000
+
+for(i in 1:dim(dat)[1]) {
+    rate_change <- dat$rate_change[i]
+    
+    reb <- rebalance(start, rate_change)
+    end <- start + reb
+    
+    dat$start[i] <- start
+    dat$change[i] <- reb * 2
+    dat$end[i] <- end
+    
+    start <- end
+    
+    long_change <- long_start * rate_change
+    long_end <- long_start + long_change
+    
+    dat$long_start[i] <- long_start
+    dat$long_change[i] <- long_change
+    dat$long_end[i] <- long_end
+    
+    long_start <- long_end
+    
+}
+```
+
+```{r}
+ggplot(dat, aes(x = date)) + 
     geom_line(aes(y = start * 2), color = "blue") + 
     geom_line(aes(y = long_start))
 ```
