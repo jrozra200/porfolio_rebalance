@@ -48,40 +48,41 @@ dat <- stock_dat %>%
            rate_change = (Close - Open) / Open) %>%
     rename(week_ending = date) %>% 
     filter(week_ending >= as_date("2020-01-01")) %>% 
-    mutate(start = as.numeric(NA),
-           change = as.numeric(NA),
-           end = as.numeric(NA),
+    mutate(start_stock = as.numeric(NA),
+           start_cash = as.numeric(NA),
+           end_stock = as.numeric(NA),
+           rebal_cash = as.numeric(NA),
+           rebal_stock = as.numeric(NA),
            long_start = as.numeric(NA),
-           long_change = as.numeric(NA),
            long_end = as.numeric(NA))
 
-rebalance <- function(start, rate_change) {
-    change <- start * rate_change
-    rebalance <- change / 2
-    
-    return(rebalance)
-}
 
-start <- 500
+
+start_stock <- 500
 long_start <- 1000
 
 for(i in 1:dim(dat)[1]) {
     rate_change <- dat$rate_change[i]
     
-    reb <- rebalance(start, rate_change)
-    end <- start + reb
+    start_cash <- start_stock
+    end_stock <- start_stock * (rate_change + 1)
     
-    dat$start[i] <- start
-    dat$change[i] <- reb * 2
-    dat$end[i] <- end
+    total <- end_stock + start_cash
+    rebal <- total / 2
     
-    start <- end
+    dat$start_stock[i] <- start_stock
+    dat$start_cash[i] <- start_cash
+    dat$end_stock[i] <- end_stock
+    dat$rebal_cash[i] <- rebal
+    dat$rebal_stock[i] <- rebal
     
-    long_change <- long_start * rate_change
-    long_end <- long_start + long_change
+    start_stock <- rebal
+    
+    # ----- # 
+    
+    long_end <- long_start * (rate_change + 1)
     
     dat$long_start[i] <- long_start
-    dat$long_change[i] <- long_change
     dat$long_end[i] <- long_end
     
     long_start <- long_end
@@ -91,8 +92,8 @@ for(i in 1:dim(dat)[1]) {
 
 ```{r}
 ggplot(dat, aes(x = week_ending)) + 
-    geom_line(aes(y = start * 2), color = "blue") + 
-    geom_line(aes(y = long_start))
+    geom_line(aes(y = rebal_stock * 2), color = "blue") + 
+    geom_line(aes(y = long_end))
 ```
 
 
@@ -102,35 +103,43 @@ ggplot(dat, aes(x = week_ending)) +
 dat <- stock_dat %>% 
     select(symbol, date, Close) %>% 
     mutate(Open = lag(Close), 
-           rate_change = (Close - Open) / Open) %>% 
+           rate_change = (Close - Open) / Open) %>%
     filter(date >= as_date("2020-01-01")) %>% 
-    mutate(start = as.numeric(NA),
-           change = as.numeric(NA),
-           end = as.numeric(NA),
+    mutate(start_stock = as.numeric(NA),
+           start_cash = as.numeric(NA),
+           end_stock = as.numeric(NA),
+           rebal_cash = as.numeric(NA),
+           rebal_stock = as.numeric(NA),
            long_start = as.numeric(NA),
-           long_change = as.numeric(NA),
            long_end = as.numeric(NA))
 
-start <- 500
+
+
+start_stock <- 500
 long_start <- 1000
 
 for(i in 1:dim(dat)[1]) {
     rate_change <- dat$rate_change[i]
     
-    reb <- rebalance(start, rate_change)
-    end <- start + reb
+    start_cash <- start_stock
+    end_stock <- start_stock * (rate_change + 1)
     
-    dat$start[i] <- start
-    dat$change[i] <- reb * 2
-    dat$end[i] <- end
+    total <- end_stock + start_cash
+    rebal <- total / 2
     
-    start <- end
+    dat$start_stock[i] <- start_stock
+    dat$start_cash[i] <- start_cash
+    dat$end_stock[i] <- end_stock
+    dat$rebal_cash[i] <- rebal
+    dat$rebal_stock[i] <- rebal
     
-    long_change <- long_start * rate_change
-    long_end <- long_start + long_change
+    start_stock <- rebal
+    
+    # ----- # 
+    
+    long_end <- long_start * (rate_change + 1)
     
     dat$long_start[i] <- long_start
-    dat$long_change[i] <- long_change
     dat$long_end[i] <- long_end
     
     long_start <- long_end
@@ -140,7 +149,65 @@ for(i in 1:dim(dat)[1]) {
 
 ```{r}
 ggplot(dat, aes(x = date)) + 
-    geom_line(aes(y = start * 2), color = "blue") + 
-    geom_line(aes(y = long_start))
+    geom_line(aes(y = rebal_stock * 2), color = "blue") + 
+    geom_line(aes(y = long_end))
+```
+
+
+```{r}
+dat <- stock_dat %>% 
+    select(symbol, date, Close) %>% 
+    mutate(Open = lag(Close), 
+           rate_change = (Close - Open) / Open) %>%
+    filter(date >= as_date("2020-01-01")) %>% 
+    mutate(rate_change = rate_change + 1)
+
+tmp <- tibble(
+    symbol = "SPY",
+    date = as_date("2020-01-01"),
+    Close = NA,
+    Open = NA,
+    rate_change = NA,
+    long_change = 1000,
+    start_cash = 500,
+    start_stock = 500,
+    total_start = start_cash + start_stock
+)
+
+dat <- bind_rows(tmp, dat)
+
+dat <- dat %>% 
+    mutate(long_change = ifelse(is.na(long_change), rate_change, long_change),
+           long_change = cumprod(long_change))
+
+dat <- dat %>% 
+    mutate(start_cash = lag(start_cash),
+           start_stock = lag(start_stock),
+           total_start = lag(total_start),
+           stock_end = as.numeric(NA),
+           stock_change = as.numeric(NA),
+           rebalance_amt = as.numeric(NA),
+           rebalance_stock = as.numeric(NA),
+           rebalance_cash = as.numeric(NA),
+           rebalanced_total = as.numeric(NA))
+
+for(i in 2:dim(dat)[1]) {
+    if(i > 2) {
+        dat$start_cash[i] <- dat$rebalance_cash[i - 1]
+        dat$start_stock[i] <- dat$rebalance_stock[i - 1]
+        dat$total_start[i] <- dat$rebalanced_total[i - 1]
+    }
+    
+    dat$stock_end[i] <- dat$start_stock[i] * dat$rate_change[i]
+    dat$stock_change[i] <- dat$stock_end[i] - dat$start_stock[i]
+    dat$rebalance_amt[i] <- dat$stock_change[i] / 2
+    dat$rebalance_stock[i] <- dat$stock_end[i] - dat$rebalance_amt[i]
+    dat$rebalance_cash[i] <- dat$start_cash[i] + dat$rebalance_amt[i]
+    dat$rebalanced_total[i] <- dat$rebalance_stock[i] + dat$rebalance_cash[i]
+}
+
+ggplot(dat, aes(x = date)) + 
+    geom_line(aes(y = rebalanced_total), color = "blue") + 
+    geom_line(aes(y = long_change))
 ```
 
