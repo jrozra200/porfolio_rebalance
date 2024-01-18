@@ -1,0 +1,26 @@
+---
+title: "diversifying"
+format: html
+---
+
+Get a list of indexes to evaluate:
+
+```{r}
+library(quantmod)
+
+# Define the ticker symbols for the funds
+funds <- c("SPY", "VTSMX", "VGTSX", "EFA", "VEMAX", "XLK", "IWM", "BND", "AGG", 
+           "VYM", "ESGU", "ESGV", "VNQ")
+
+# Function to get historical data
+getHistoricalData <- function(symbol) {
+    getSymbols(symbol, auto.assign = FALSE)
+}
+
+# Fetch data and store in a list
+historicalData <- lapply(funds, getHistoricalData)
+
+# Convert the lists into a dataframe
+
+```
+
