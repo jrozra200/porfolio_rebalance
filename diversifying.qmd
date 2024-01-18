@@ -7,6 +7,11 @@ Get a list of indexes to evaluate:
 
 ```{r}
 library(quantmod)
+library(stringr)
+library(dplyr)
+library(lubridate)
+
+options(scipen = 999)
 
 # Define the ticker symbols for the funds
 funds <- c("SPY", "VTSMX", "VGTSX", "EFA", "VEMAX", "XLK", "IWM", "BND", "AGG", 
@@ -21,6 +26,50 @@ getHistoricalData <- function(symbol) {
 historicalData <- lapply(funds, getHistoricalData)
 
 # Convert the lists into a dataframe
+full_dat <- tibble()
+for(i in 1:length(historicalData)) {
+    tmp <- as_tibble(historicalData[[i]]) 
+    names(tmp) <- str_remove(names(historicalData[[i]]), "^[A-Z]+\\.")
+    tmp <- tmp %>% 
+        mutate(date = index(historicalData[[i]]),
+               symbol = unique(str_remove(str_extract(names(historicalData[[i]]), "^[A-Z]+\\."), "\\.")))
+    
+    full_dat <- bind_rows(full_dat, tmp)
+}
 
+full_dat <- full_dat %>% 
+    group_by(symbol) %>% 
+    mutate(Close_lag = lag(Close),
+           change = (Close - Close_lag) / Close_lag) %>% 
+    filter(date >= as_date("2020-01-01") & 
+               Volume > 0)
+
+min_change <- full_dat %>% 
+    ungroup() %>% 
+    group_by(date) %>% 
+    summarise(min_change = min(change))
+
+buy_dat <- full_dat %>% 
+    inner_join(min_change, by = c("date", 
+                                  "change" = "min_change")) %>% 
+    arrange(date)
+
+buy_dat <- buy_dat %>% 
+    mutate(dollars_in = 5,
+           stock_bought = dollars_in / Close)
+
+sum_dat <- buy_dat %>% 
+    group_by(symbol) %>% 
+    summarise(total_stock = sum(stock_bought),
+              total_spent = sum(dollars_in))
+
+end_price = full_dat %>% 
+    filter(date != Sys.Date()) %>% 
+    slice_tail(n = 1) %>% 
+    select(symbol, Close)
+
+sum_dat <- sum_dat %>% 
+    left_join(end_price, by = "symbol") %>% 
+    mutate(total_value = total_stock * Close)
 ```
 
